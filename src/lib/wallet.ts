@@ -22,12 +22,37 @@ export async function getBrowserSigner() {
   }
   const provider = new ethers.BrowserProvider(window.ethereum);
   await provider.send("eth_requestAccounts", []);
+
   const network = await provider.getNetwork();
   if (Number(network.chainId) !== CELO_SEPOLIA_CHAIN_ID) {
-    throw new Error(
-      `Wrong network. Switch to Celo Sepolia (chain ID ${CELO_SEPOLIA_CHAIN_ID}).`
-    );
+    // Try to switch; if chain not added, add it first
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0xaa044c" }], // 11142220 in hex
+      });
+    } catch (switchErr: unknown) {
+      const code = (switchErr as { code?: number })?.code;
+      if (code === 4902) {
+        // Chain not added to MetaMask — add it
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: "0xaa044c",
+              chainName: "Celo Sepolia Testnet",
+              nativeCurrency: { name: "CELO", symbol: "CELO-S", decimals: 18 },
+              rpcUrls: ["https://11142220.rpc.thirdweb.com"],
+              blockExplorerUrls: ["https://celo-sepolia.blockscout.com"],
+            },
+          ],
+        });
+      } else {
+        throw switchErr;
+      }
+    }
   }
+
   return provider.getSigner();
 }
 
