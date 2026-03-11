@@ -11,7 +11,7 @@ export const CELO_SEPOLIA_EXPLORER = "https://sepolia.celoscan.io";
 // ─── Contract Addresses ───────────────────────────────────────────────────────
 export const TASK_ESCROW_ADDRESS =
   process.env.NEXT_PUBLIC_TASK_ESCROW_ADDRESS ??
-  "0x5a5b0C0af7517B50dBe5905DEaa2f9200835c038";
+  "0xc361290c3A84b9F3F2C44683D908Ca5172EB9031";
 
 export const USDC_ADDRESS =
   process.env.NEXT_PUBLIC_USDC_ADDRESS ??
