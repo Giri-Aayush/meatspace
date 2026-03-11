@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTaskEscrow } from "@/lib/contract";
-import { CELO_SEPOLIA_EXPLORER } from "@/constants";
 import { haversineMetres } from "@/lib/haversine";
 
 const DELIVERY_RADIUS_M = 50;
 
 // POST /api/tasks/[id]/delivery-gps
 // Body: { lat, lng, workerAddress }
+// Returns: { ok, distanceMetres }
+// The caller (worker browser) is responsible for calling submitDeliveryGPS(taskId) on-chain.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -38,22 +38,13 @@ export async function POST(
 
     console.log(`[delivery-gps] task=${taskId} worker=${workerAddress} gps=(${lat},${lng}) distance=${Math.round(distanceMetres)}m`);
 
-    const escrow = getTaskEscrow();
-    const tx = await escrow.submitDeliveryGPS(taskId);
-    const receipt = await tx.wait();
-
     return NextResponse.json({
       ok: true,
       distanceMetres: Math.round(distanceMetres),
-      txHash: receipt.hash,
-      explorerUrl: `${CELO_SEPOLIA_EXPLORER}/tx/${receipt.hash}`,
     });
   } catch (err) {
     console.error("POST delivery-gps error:", err);
-    const message = err instanceof Error ? err.message : "Failed to submit delivery GPS";
-    if (message.includes("Wrong state") || message.includes("Not your task")) {
-      return NextResponse.json({ error: "Task is not in the correct state for GPS submission" }, { status: 400 });
-    }
+    const message = err instanceof Error ? err.message : "Failed to validate delivery GPS";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

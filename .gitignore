@@ -1,6 +1,9 @@
 # Docs (internal — all in docs/ folder)
 docs/
 
+# Claude instructions (local only)
+CLAUDE.md
+
 # Environment
 .env
 .env.local

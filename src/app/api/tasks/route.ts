@@ -2,7 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { generateOTP, hashOTP } from "@/lib/otp";
 import { getTaskEscrow, getUSDC, ensureUSDCApproval, parseTaskCreatedId } from "@/lib/contract";
-import { TaskState, TASK_STATE_LABELS } from "@/constants";
+import { TaskState, TASK_STATE_LABELS, USDC_ADDRESS } from "@/constants";
+import { createThirdwebClient, defineChain } from "thirdweb";
+import { facilitator, settlePayment } from "thirdweb/x402";
+
+// ─── x402 setup (lazy — only initialised when THIRDWEB_SECRET_KEY is set) ────
+const X402_ENABLED = !!process.env.THIRDWEB_SECRET_KEY && !!process.env.PLATFORM_WALLET_ADDRESS;
+
+function getX402Facilitator() {
+  const client = createThirdwebClient({ secretKey: process.env.THIRDWEB_SECRET_KEY! });
+  return facilitator({ client, serverWalletAddress: process.env.PLATFORM_WALLET_ADDRESS! });
+}
+
+const celoSepolia = defineChain(11142220);
 
 // GET /api/tasks — list all tasks with merged on-chain state
 export async function GET() {
@@ -51,8 +63,31 @@ export async function GET() {
 }
 
 // POST /api/tasks — create a new task, lock USDC in escrow
+// Requires x402 payment (0.01 USDC) when THIRDWEB_SECRET_KEY + PLATFORM_WALLET_ADDRESS are set.
 export async function POST(req: NextRequest) {
   try {
+    // ── x402 payment gate ───────────────────────────────────────────────────
+    if (X402_ENABLED) {
+      const paymentData = req.headers.get("X-PAYMENT") ?? req.headers.get("PAYMENT-SIGNATURE");
+      const result = await settlePayment({
+        resourceUrl: `${req.nextUrl.origin}/api/tasks`,
+        method: "POST",
+        paymentData,
+        payTo: process.env.PLATFORM_WALLET_ADDRESS!,
+        network: celoSepolia,
+        price: "$0.01",
+        facilitator: getX402Facilitator(),
+      });
+      if (result.status !== 200) {
+        const headers: Record<string, string> = {};
+        if (result.responseHeaders) {
+          Object.entries(result.responseHeaders).forEach(([k, v]) => { headers[k] = String(v); });
+        }
+        return NextResponse.json(result.responseBody, { status: result.status, headers });
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const body = await req.json();
     const {
       description,
