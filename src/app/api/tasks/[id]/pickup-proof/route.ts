@@ -50,6 +50,12 @@ export async function POST(
   } catch (err) {
     console.error("POST pickup-proof error:", err);
     const message = err instanceof Error ? err.message : "Failed to submit pickup proof";
+    if (message.includes("Wrong state")) {
+      return NextResponse.json({ error: "Task is not in ACCEPTED state" }, { status: 400 });
+    }
+    if (message.includes("Not your task")) {
+      return NextResponse.json({ error: "Only the assigned worker can submit pickup proof" }, { status: 403 });
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

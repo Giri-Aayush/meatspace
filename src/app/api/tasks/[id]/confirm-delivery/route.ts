@@ -71,11 +71,12 @@ export async function POST(
   } catch (err) {
     console.error("POST confirm-delivery error:", err);
     const message = err instanceof Error ? err.message : "Failed to confirm delivery";
-    // Surface contract revert reason cleanly
-    const isWrongOTP = message.includes("Invalid OTP");
-    return NextResponse.json(
-      { error: isWrongOTP ? "Invalid OTP — ask the recipient to read it again" : message },
-      { status: isWrongOTP ? 400 : 500 }
-    );
+    if (message.includes("Invalid OTP")) {
+      return NextResponse.json({ error: "Invalid OTP — ask the recipient to read it again" }, { status: 400 });
+    }
+    if (message.includes("GPS not verified") || message.includes("wrong state") || message.includes("Task not in")) {
+      return NextResponse.json({ error: "Task is not in the correct state for delivery confirmation" }, { status: 400 });
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
