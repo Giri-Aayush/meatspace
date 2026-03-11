@@ -3,13 +3,12 @@ import { ethers } from "ethers";
 import { db } from "@/lib/db";
 import { generateOTP, hashOTP } from "@/lib/otp";
 import { getTaskEscrow, ensureUSDCApproval, parseTaskCreatedId } from "@/lib/contract";
-import { TaskState, TASK_STATE_LABELS, USDC_ADDRESS } from "@/constants";
+import { TaskState, TASK_STATE_LABELS, USDC_ADDRESS, CELO_SEPOLIA_RPC } from "@/constants";
 
 // ─── Manual x402 payment gate ────────────────────────────────────────────────
 const X402_ENABLED = !!process.env.PLATFORM_WALLET_ADDRESS;
 const FEE_WEI = BigInt(10_000); // 0.01 USDC (6 decimals)
 const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
-const CELO_RPC = "https://forno.celo-sepolia.celo-testnet.org";
 
 function x402Challenge(resourceUrl: string) {
   return NextResponse.json(
@@ -36,7 +35,7 @@ function x402Challenge(resourceUrl: string) {
 
 async function verifyPayment(xPayment: string): Promise<boolean> {
   const { txHash } = JSON.parse(atob(xPayment));
-  const provider = new ethers.JsonRpcProvider(CELO_RPC);
+  const provider = new ethers.JsonRpcProvider(CELO_SEPOLIA_RPC);
   const receipt = await provider.getTransactionReceipt(txHash);
   if (!receipt) return false;
 

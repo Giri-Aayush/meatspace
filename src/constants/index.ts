@@ -5,8 +5,8 @@ export const DEMO_TASK_AMOUNT_WEI = 100000n; // 0.1 USDC in 6-decimal units
 
 // ─── Network ──────────────────────────────────────────────────────────────────
 export const CELO_SEPOLIA_CHAIN_ID = 11142220;
-export const CELO_SEPOLIA_RPC = "https://forno.celo-sepolia.celo-testnet.org";
-export const CELO_SEPOLIA_EXPLORER = "https://sepolia.celoscan.io";
+export const CELO_SEPOLIA_RPC = "https://11142220.rpc.thirdweb.com";
+export const CELO_SEPOLIA_EXPLORER = "https://celo-sepolia.blockscout.com";
 
 // ─── Contract Addresses ───────────────────────────────────────────────────────
 export const TASK_ESCROW_ADDRESS =

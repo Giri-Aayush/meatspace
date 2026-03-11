@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
-import { TASK_ESCROW_ADDRESS, TASK_ESCROW_ABI, USDC_ADDRESS, USDC_ABI } from "@/constants";
+import { TASK_ESCROW_ADDRESS, TASK_ESCROW_ABI, USDC_ADDRESS, USDC_ABI, CELO_SEPOLIA_RPC } from "@/constants";
 
-const RPC = "https://forno.celo-sepolia.celo-testnet.org";
+const RPC = CELO_SEPOLIA_RPC;
 
 function getProvider() {
   return new ethers.JsonRpcProvider(RPC);
