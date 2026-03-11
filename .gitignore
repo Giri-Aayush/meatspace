@@ -1,0 +1,25 @@
+# Docs (internal — all in docs/ folder)
+docs/
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Next.js
+.next/
+out/
+node_modules/
+
+# Foundry
+cache/
+broadcast/
+
+# Build artifacts (Foundry out/ has ABIs — commit selectively)
+# out/ is intentionally NOT ignored so ABIs are available
+
+# OS
+.DS_Store
+
+# MCP server deps
+mcp-server/node_modules/
