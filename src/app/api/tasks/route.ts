@@ -1,20 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ethers } from "ethers";
 import { db } from "@/lib/db";
 import { generateOTP, hashOTP } from "@/lib/otp";
-import { getTaskEscrow, getUSDC, ensureUSDCApproval, parseTaskCreatedId } from "@/lib/contract";
+import { getTaskEscrow, ensureUSDCApproval, parseTaskCreatedId } from "@/lib/contract";
 import { TaskState, TASK_STATE_LABELS, USDC_ADDRESS } from "@/constants";
-import { createThirdwebClient, defineChain } from "thirdweb";
-import { facilitator, settlePayment } from "thirdweb/x402";
 
-// ─── x402 setup (lazy — only initialised when THIRDWEB_SECRET_KEY is set) ────
-const X402_ENABLED = !!process.env.THIRDWEB_SECRET_KEY && !!process.env.PLATFORM_WALLET_ADDRESS;
+// ─── Manual x402 payment gate ────────────────────────────────────────────────
+const X402_ENABLED = !!process.env.PLATFORM_WALLET_ADDRESS;
+const FEE_WEI = BigInt(10_000); // 0.01 USDC (6 decimals)
+const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
+const CELO_RPC = "https://forno.celo-sepolia.celo-testnet.org";
 
-function getX402Facilitator() {
-  const client = createThirdwebClient({ secretKey: process.env.THIRDWEB_SECRET_KEY! });
-  return facilitator({ client, serverWalletAddress: process.env.PLATFORM_WALLET_ADDRESS! });
+function x402Challenge(resourceUrl: string) {
+  return NextResponse.json(
+    {
+      x402Version: 2,
+      error: "Payment required",
+      accepts: [
+        {
+          scheme: "exact",
+          network: "celo-sepolia",
+          maxAmountRequired: FEE_WEI.toString(),
+          resource: resourceUrl,
+          description: "0.01 USDC to create a task on Meatspace",
+          mimeType: "application/json",
+          payTo: process.env.PLATFORM_WALLET_ADDRESS!,
+          maxTimeoutSeconds: 300,
+          asset: USDC_ADDRESS,
+        },
+      ],
+    },
+    { status: 402 }
+  );
 }
 
-const celoSepolia = defineChain(11142220);
+async function verifyPayment(xPayment: string): Promise<boolean> {
+  const { txHash } = JSON.parse(atob(xPayment));
+  const provider = new ethers.JsonRpcProvider(CELO_RPC);
+  const receipt = await provider.getTransactionReceipt(txHash);
+  if (!receipt) return false;
+
+  const platformAddr = process.env.PLATFORM_WALLET_ADDRESS!.toLowerCase();
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== USDC_ADDRESS.toLowerCase()) continue;
+    if (log.topics[0] !== TRANSFER_TOPIC) continue;
+    if (log.topics.length < 3) continue;
+    const to = "0x" + log.topics[2].slice(26);
+    const value = BigInt(log.data);
+    if (to.toLowerCase() === platformAddr && value >= FEE_WEI) return true;
+  }
+  return false;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // GET /api/tasks — list all tasks with merged on-chain state
 export async function GET() {
@@ -63,27 +100,25 @@ export async function GET() {
 }
 
 // POST /api/tasks — create a new task, lock USDC in escrow
-// Requires x402 payment (0.01 USDC) when THIRDWEB_SECRET_KEY + PLATFORM_WALLET_ADDRESS are set.
+// Requires x402 payment (0.01 USDC) when PLATFORM_WALLET_ADDRESS is set.
 export async function POST(req: NextRequest) {
   try {
     // ── x402 payment gate ───────────────────────────────────────────────────
     if (X402_ENABLED) {
-      const paymentData = req.headers.get("X-PAYMENT") ?? req.headers.get("PAYMENT-SIGNATURE");
-      const result = await settlePayment({
-        resourceUrl: `${req.nextUrl.origin}/api/tasks`,
-        method: "POST",
-        paymentData,
-        payTo: process.env.PLATFORM_WALLET_ADDRESS!,
-        network: celoSepolia,
-        price: "$0.01",
-        facilitator: getX402Facilitator(),
-      });
-      if (result.status !== 200) {
-        const headers: Record<string, string> = {};
-        if (result.responseHeaders) {
-          Object.entries(result.responseHeaders).forEach(([k, v]) => { headers[k] = String(v); });
+      const xPayment = req.headers.get("X-PAYMENT");
+      if (!xPayment) {
+        return x402Challenge(`${req.nextUrl.origin}/api/tasks`);
+      }
+      try {
+        const valid = await verifyPayment(xPayment);
+        if (!valid) {
+          return NextResponse.json(
+            { error: "Payment not found or insufficient (need 0.01 USDC to platform wallet)" },
+            { status: 402 }
+          );
         }
-        return NextResponse.json(result.responseBody, { status: result.status, headers });
+      } catch {
+        return NextResponse.json({ error: "Payment verification failed" }, { status: 402 });
       }
     }
     // ────────────────────────────────────────────────────────────────────────
