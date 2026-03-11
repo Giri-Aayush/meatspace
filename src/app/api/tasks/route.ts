@@ -7,6 +7,7 @@ import { TaskState, TASK_STATE_LABELS, USDC_ADDRESS, CELO_SEPOLIA_RPC } from "@/
 
 // ─── Manual x402 payment gate ────────────────────────────────────────────────
 const X402_ENABLED = !!process.env.PLATFORM_WALLET_ADDRESS;
+const MCP_API_KEY = process.env.MEATSPACE_API_KEY;
 const FEE_WEI = BigInt(10_000); // 0.01 USDC (6 decimals)
 const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
 
@@ -103,7 +104,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     // ── x402 payment gate ───────────────────────────────────────────────────
-    if (X402_ENABLED) {
+    // Allow server-to-server MCP calls to bypass x402 with an API key
+    const callerApiKey = req.headers.get("X-API-KEY");
+    const isMcpCall = MCP_API_KEY && callerApiKey === MCP_API_KEY;
+
+    if (X402_ENABLED && !isMcpCall) {
       const xPayment = req.headers.get("X-PAYMENT");
       if (!xPayment) {
         return x402Challenge(`${req.nextUrl.origin}/api/tasks`);

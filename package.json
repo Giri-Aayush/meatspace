@@ -10,6 +10,8 @@
     "compile": "forge build"
   },
   "dependencies": {
+    "@selfxyz/core": "^1.0.8",
+    "@selfxyz/qrcode": "^1.0.11",
     "ethers": "^6.13.4",
     "next": "15.2.2",
     "react": "^19.0.0",
