@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getTaskEscrow } from "@/lib/contract";
 import { CELO_SEPOLIA_EXPLORER } from "@/constants";
+import { haversineMetres } from "@/lib/haversine";
+import { uploadProofBundle } from "@/lib/ipfs";
+
+const PICKUP_RADIUS_M = 100;
 
 // POST /api/tasks/[id]/pickup-proof
-// Body: { lat, lng, photoBase64, workerAddress }
-// Phase 2: haversine and IPFS are stubbed (replaced in Phase 3)
+// Body: { lat, lng, photoBase64?, workerAddress }
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,16 +28,31 @@ export async function POST(
       return NextResponse.json({ error: "lat, lng, workerAddress required" }, { status: 400 });
     }
 
-    // Phase 2 stub — replaced with real haversine check in Phase 3
-    const distanceMetres = 0; // stub
-    console.log(`[pickup-proof] task=${taskId} worker=${workerAddress} gps=(${lat},${lng}) distance=${distanceMetres}m (stub)`);
-    if (photoBase64) console.log(`[pickup-proof] photo received (${photoBase64.length} chars)`);
+    // Haversine gate — worker must be within 100m of the shop
+    const distanceMetres = haversineMetres(lat, lng, record.shopLat, record.shopLng);
+    if (distanceMetres > PICKUP_RADIUS_M) {
+      return NextResponse.json(
+        { error: `Too far from shop: ${Math.round(distanceMetres)}m (max ${PICKUP_RADIUS_M}m)` },
+        { status: 400 }
+      );
+    }
 
-    // Phase 2 stub — replaced with real IPFS upload in Phase 3
-    const ipfsCid = "bafkreidemo";
-    console.log(`[pickup-proof] IPFS CID (stub): ${ipfsCid}`);
+    // IPFS upload — photo + metadata bundle
+    const photoBuffer = photoBase64
+      ? Buffer.from(photoBase64, "base64")
+      : undefined;
 
-    // Call contract — server wallet signs on behalf of worker for Phase 2
+    const ipfsCid = await uploadProofBundle({
+      photoBuffer,
+      taskId,
+      workerAddress,
+      lat,
+      lng,
+      timestamp: Date.now(),
+    });
+
+    console.log(`[pickup-proof] task=${taskId} worker=${workerAddress} gps=(${lat},${lng}) distance=${Math.round(distanceMetres)}m cid=${ipfsCid}`);
+
     const escrow = getTaskEscrow();
     const tx = await escrow.submitPickupProof(taskId, ipfsCid);
     const receipt = await tx.wait();
@@ -42,10 +60,10 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       ipfsCid,
-      distanceMetres,
+      ipfsUrl: `https://ipfs.io/ipfs/${ipfsCid}`,
+      distanceMetres: Math.round(distanceMetres),
       txHash: receipt.hash,
       explorerUrl: `${CELO_SEPOLIA_EXPLORER}/tx/${receipt.hash}`,
-      note: "haversine + IPFS are stubbed in Phase 2",
     });
   } catch (err) {
     console.error("POST pickup-proof error:", err);
